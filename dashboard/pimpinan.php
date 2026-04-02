@@ -2,16 +2,35 @@
 session_start();
 require_once '../config/database.php';
 
-// Proteksi halaman
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] != 'pimpinan') {
+// Proteksi halaman - hanya pimpinan
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'pimpinan') {
     header("Location: ../auth/login.php");
     exit();
 }
 
-// Hitung statistik
-$total_dokumen = query("SELECT COUNT(*) as total FROM dokumen")->fetch_assoc()['total'];
-$dokumen_aktif = query("SELECT COUNT(*) as total FROM dokumen WHERE status = 'aktif'")->fetch_assoc()['total'];
-$dokumen_kadaluarsa = query("SELECT COUNT(*) as total FROM dokumen WHERE status = 'kadaluarsa'")->fetch_assoc()['total'];
+// Fungsi helper
+function e($string) {
+    return htmlspecialchars($string ?? '', ENT_QUOTES, 'UTF-8');
+}
+
+// Hitung statistik dengan prepared statement
+$stats = db_select_one("SELECT 
+    COUNT(*) as total,
+    SUM(CASE WHEN status = 'aktif' THEN 1 ELSE 0 END) as aktif,
+    SUM(CASE WHEN status = 'kadaluarsa' THEN 1 ELSE 0 END) as kadaluarsa
+FROM dokumen");
+
+$total_dokumen = $stats['total'] ?? 0;
+$dokumen_aktif = $stats['aktif'] ?? 0;
+$dokumen_kadaluarsa = $stats['kadaluarsa'] ?? 0;
+
+// Ambil dokumen terbaru
+$recent_dokumen = db_select("SELECT d.*, k.nama_kategori, u.nama as uploader 
+                             FROM dokumen d 
+                             JOIN kategori k ON d.kategori_id = k.id 
+                             JOIN users u ON d.uploaded_by = u.id 
+                             ORDER BY d.created_at DESC 
+                             LIMIT 10");
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -32,16 +51,23 @@ $dokumen_kadaluarsa = query("SELECT COUNT(*) as total FROM dokumen WHERE status 
             padding: 15px 20px;
         }
         .sidebar .nav-link:hover, .sidebar .nav-link.active {
-            background: #9b59b6;
+            background: rgba(255,255,255,0.15);
         }
         .stat-card {
             border: none;
             border-radius: 10px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+        .stat-card:hover {
+            transform: translateY(-5px);
         }
         .navbar {
             background: white;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .table td {
+            vertical-align: middle;
         }
     </style>
 </head>
@@ -80,7 +106,7 @@ $dokumen_kadaluarsa = query("SELECT COUNT(*) as total FROM dokumen WHERE status 
                     <div class="container-fluid">
                         <span class="navbar-brand mb-0 h1">Dashboard Pimpinan</span>
                         <div class="d-flex align-items-center">
-                            <span class="me-3">Selamat datang, <strong><?php echo $_SESSION['nama']; ?></strong></span>
+                            <span class="me-3">Selamat datang, <strong><?php echo e($_SESSION['nama'] ?? 'Pimpinan'); ?></strong></span>
                         </div>
                     </div>
                 </nav>
@@ -96,9 +122,9 @@ $dokumen_kadaluarsa = query("SELECT COUNT(*) as total FROM dokumen WHERE status 
                                     <div class="d-flex justify-content-between">
                                         <div>
                                             <h6 class="card-title">Total Dokumen</h6>
-                                            <h3><?php echo $total_dokumen; ?></h3>
+                                            <h3><?php echo (int)$total_dokumen; ?></h3>
                                         </div>
-                                        <i class="bi bi-files fs-1"></i>
+                                        <i class="bi bi-files fs-1 opacity-75"></i>
                                     </div>
                                 </div>
                             </div>
@@ -109,9 +135,9 @@ $dokumen_kadaluarsa = query("SELECT COUNT(*) as total FROM dokumen WHERE status 
                                     <div class="d-flex justify-content-between">
                                         <div>
                                             <h6 class="card-title">Dokumen Aktif</h6>
-                                            <h3><?php echo $dokumen_aktif; ?></h3>
+                                            <h3><?php echo (int)$dokumen_aktif; ?></h3>
                                         </div>
-                                        <i class="bi bi-check-circle fs-1"></i>
+                                        <i class="bi bi-check-circle fs-1 opacity-75"></i>
                                     </div>
                                 </div>
                             </div>
@@ -122,9 +148,9 @@ $dokumen_kadaluarsa = query("SELECT COUNT(*) as total FROM dokumen WHERE status 
                                     <div class="d-flex justify-content-between">
                                         <div>
                                             <h6 class="card-title">Dokumen Kadaluarsa</h6>
-                                            <h3><?php echo $dokumen_kadaluarsa; ?></h3>
+                                            <h3><?php echo (int)$dokumen_kadaluarsa; ?></h3>
                                         </div>
-                                        <i class="bi bi-exclamation-triangle fs-1"></i>
+                                        <i class="bi bi-exclamation-triangle fs-1 opacity-75"></i>
                                     </div>
                                 </div>
                             </div>
@@ -134,57 +160,61 @@ $dokumen_kadaluarsa = query("SELECT COUNT(*) as total FROM dokumen WHERE status 
                     <!-- All Documents -->
                     <div class="card">
                         <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0">Semua Dokumen</h5>
+                            <h5 class="mb-0">Dokumen Terbaru</h5>
                             <a href="../dokumen/list.php" class="btn btn-sm btn-primary">Lihat Semua</a>
                         </div>
                         <div class="card-body">
-                            <table class="table table-striped table-hover">
-                                <thead class="table-dark">
-                                    <tr>
-                                        <th>No</th>
-                                        <th>Judul Dokumen</th>
-                                        <th>Kategori</th>
-                                        <th>Versi</th>
-                                        <th>Status</th>
-                                        <th>Uploader</th>
-                                        <th>Aksi</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <?php
-                                    $dokumen = query("SELECT d.*, k.nama_kategori, u.nama as uploader 
-                                                     FROM dokumen d 
-                                                     JOIN kategori k ON d.kategori_id = k.id 
-                                                     JOIN users u ON d.uploaded_by = u.id 
-                                                     ORDER BY d.created_at DESC LIMIT 10");
-                                    $no = 1;
-                                    while ($row = $dokumen->fetch_assoc()):
-                                    ?>
-                                    <tr>
-                                        <td><?php echo $no++; ?></td>
-                                        <td><?php echo $row['judul_dokumen']; ?></td>
-                                        <td><?php echo $row['nama_kategori']; ?></td>
-                                        <td><?php echo $row['versi']; ?></td>
-                                        <td>
-                                            <span class="badge bg-<?php echo $row['status'] == 'aktif' ? 'success' : 'warning'; ?>">
-                                                <?php echo ucfirst($row['status']); ?>
-                                            </span>
-                                        </td>
-                                        <td><?php echo $row['uploader']; ?></td>
-                                        <td>
-                                            <a href="../dokumen/download.php?id=<?php echo $row['id']; ?>" class="btn btn-sm btn-success">
-                                                <i class="bi bi-download me-1"></i>Download
-                                            </a>
-                                        </td>
-                                    </tr>
-                                    <?php endwhile; ?>
-                                    <?php if ($dokumen->num_rows == 0): ?>
-                                    <tr>
-                                        <td colspan="7" class="text-center">Belum ada dokumen dalam sistem</td>
-                                    </tr>
-                                    <?php endif; ?>
-                                </tbody>
-                            </table>
+                            <div class="table-responsive">
+                                <table class="table table-striped table-hover">
+                                    <thead class="table-dark">
+                                        <tr>
+                                            <th width="5%">No</th>
+                                            <th>Judul Dokumen</th>
+                                            <th>Kategori</th>
+                                            <th width="8%">Versi</th>
+                                            <th width="10%">Status</th>
+                                            <th>Uploader</th>
+                                            <th width="15%">Aksi</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php if (!empty($recent_dokumen)): ?>
+                                            <?php $no = 1; foreach ($recent_dokumen as $row): ?>
+                                            <tr>
+                                                <td><?php echo $no++; ?></td>
+                                                <td><?php echo e($row['judul_dokumen']); ?></td>
+                                                <td><?php echo e($row['nama_kategori']); ?></td>
+                                                <td><?php echo e($row['versi']); ?></td>
+                                                <td>
+                                                    <?php 
+                                                    $badge_class = ($row['status'] === 'aktif') ? 'success' : 'warning';
+                                                    $status_text = ucfirst(e($row['status']));
+                                                    ?>
+                                                    <span class="badge bg-<?php echo $badge_class; ?>">
+                                                        <?php echo $status_text; ?>
+                                                    </span>
+                                                </td>
+                                                <td><?php echo e($row['uploader']); ?></td>
+                                                <td>
+                                                    <a href="../dokumen/download.php?id=<?php echo (int)$row['id']; ?>" 
+                                                       class="btn btn-sm btn-success" 
+                                                       title="Download">
+                                                        <i class="bi bi-download me-1"></i>Download
+                                                    </a>
+                                                </td>
+                                            </tr>
+                                            <?php endforeach; ?>
+                                        <?php else: ?>
+                                            <tr>
+                                                <td colspan="7" class="text-center py-4">
+                                                    <i class="bi bi-inbox text-muted" style="font-size: 2rem;"></i>
+                                                    <p class="text-muted mt-2">Belum ada dokumen dalam sistem</p>
+                                                </td>
+                                            </tr>
+                                        <?php endif; ?>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </div>

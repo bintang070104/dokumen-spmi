@@ -9,31 +9,79 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 $role = $_SESSION['role'];
-$user_id = $_SESSION['user_id'];
+$user_id = intval($_SESSION['user_id']);
 
-// Query berdasarkan role
-if ($role == 'admin') {
-    $sql = "SELECT d.*, k.nama_kategori, u.nama as uploader 
-            FROM dokumen d 
-            JOIN kategori k ON d.kategori_id = k.id 
-            JOIN users u ON d.uploaded_by = u.id 
-            ORDER BY d.created_at DESC";
-} elseif ($role == 'operator') {
-    $sql = "SELECT d.*, k.nama_kategori, u.nama as uploader 
-            FROM dokumen d 
-            JOIN kategori k ON d.kategori_id = k.id 
-            JOIN users u ON d.uploaded_by = u.id 
-            WHERE d.uploaded_by = $user_id
-            ORDER BY d.created_at DESC";
-} else {
-    $sql = "SELECT d.*, k.nama_kategori, u.nama as uploader 
-            FROM dokumen d 
-            JOIN kategori k ON d.kategori_id = k.id 
-            JOIN users u ON d.uploaded_by = u.id 
-            ORDER BY d.created_at DESC";
+// Fungsi helper untuk escaping output
+function e($string) {
+    return htmlspecialchars($string ?? '', ENT_QUOTES, 'UTF-8');
 }
 
-$result = query($sql);
+// Inisialisasi variabel
+$result = [];
+$error = '';
+
+try {
+    // Gunakan db_select untuk prepared statements
+    if ($role == 'admin') {
+        $result = db_select("SELECT d.*, k.nama_kategori, u.nama as uploader 
+                            FROM dokumen d 
+                            JOIN kategori k ON d.kategori_id = k.id 
+                            JOIN users u ON d.uploaded_by = u.id 
+                            ORDER BY d.created_at DESC");
+    } elseif ($role == 'operator') {
+        $result = db_select("SELECT d.*, k.nama_kategori, u.nama as uploader 
+                            FROM dokumen d 
+                            JOIN kategori k ON d.kategori_id = k.id 
+                            JOIN users u ON d.uploaded_by = u.id 
+                            WHERE d.uploaded_by = ?
+                            ORDER BY d.created_at DESC", [$user_id]);
+    } else {
+        // Role pimpinan atau lainnya
+        $result = db_select("SELECT d.*, k.nama_kategori, u.nama as uploader 
+                            FROM dokumen d 
+                            JOIN kategori k ON d.kategori_id = k.id 
+                            JOIN users u ON d.uploaded_by = u.id 
+                            ORDER BY d.created_at DESC");
+    }
+    
+    if ($result === false) {
+        throw new Exception("Gagal mengambil data dokumen");
+    }
+    
+} catch (Exception $e) {
+    $error = $e->getMessage();
+}
+
+// Fungsi untuk mengecek status kadaluarsa
+function getStatusBadge($row) {
+    $status = $row['status'];
+    $tanggal_kadaluarsa = $row['tanggal_kadaluarsa'];
+    
+    // Cek apakah tanggal valid
+    if (empty($tanggal_kadaluarsa) || $tanggal_kadaluarsa == '0000-00-00') {
+        $badge_class = $status == 'aktif' ? 'success' : 'warning';
+        return '<span class="badge bg-' . $badge_class . '">' . ucfirst(e($status)) . '</span>';
+    }
+    
+    $kadaluarsa_timestamp = strtotime($tanggal_kadaluarsa);
+    $sekarang = time();
+    
+    if ($kadaluarsa_timestamp !== false && $kadaluarsa_timestamp < $sekarang && $status == 'aktif') {
+        return '<span class="badge bg-danger">Perlu Update</span>';
+    } else {
+        $badge_class = $status == 'aktif' ? 'success' : 'warning';
+        return '<span class="badge bg-' . $badge_class . '">' . ucfirst(e($status)) . '</span>';
+    }
+}
+
+// Fungsi format tanggal aman
+function formatTanggal($tanggal) {
+    if (empty($tanggal) || $tanggal == '0000-00-00') {
+        return '-';
+    }
+    $timestamp = strtotime($tanggal);
+    return $timestamp !== false ? date('d-m-Y', $timestamp) : '-';
+}
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -55,12 +103,16 @@ $result = query($sql);
             color: white;
             padding: 15px 20px;
         }
-        .sidebar .nav-link:hover {
-            opacity: 0.8;
+        .sidebar .nav-link:hover, .sidebar .nav-link.active {
+            opacity: 0.9;
+            background: rgba(255,255,255,0.1);
         }
         .navbar {
             background: white;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .table td {
+            vertical-align: middle;
         }
     </style>
 </head>
@@ -68,14 +120,14 @@ $result = query($sql);
     <div class="container-fluid">
         <div class="row">
             <!-- Sidebar -->
-            <div class="col-md-2 sidebar p-0 sidebar-<?php echo $role; ?>">
+            <div class="col-md-2 sidebar p-0 sidebar-<?php echo e($role); ?>">
                 <div class="p-3 text-center border-bottom">
                     <h5>SPMI System</h5>
-                    <small><?php echo ucfirst($role); ?> Panel</small>
+                    <small><?php echo e(ucfirst($role)); ?> Panel</small>
                 </div>
                 <ul class="nav flex-column">
                     <li class="nav-item">
-                        <a class="nav-link" href="../dashboard/<?php echo $role; ?>.php">
+                        <a class="nav-link" href="../dashboard/<?php echo e($role); ?>.php">
                             <i class="bi bi-speedometer2 me-2"></i> Dashboard
                         </a>
                     </li>
@@ -120,9 +172,16 @@ $result = query($sql);
                 </nav>
 
                 <div class="p-4">
+                    <?php if (!empty($error)): ?>
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            <?php echo e($error); ?>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    <?php endif; ?>
+
                     <?php if (isset($_GET['success'])): ?>
                         <div class="alert alert-success alert-dismissible fade show" role="alert">
-                            <?php echo $_GET['success']; ?>
+                            <?php echo e($_GET['success']); ?>
                             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                         </div>
                     <?php endif; ?>
@@ -138,63 +197,58 @@ $result = query($sql);
                         </div>
                         <div class="card-body">
                             <div class="table-responsive">
-                                <table class="table table-striped table-hover">
+                                <table class="table table-striped table-hover align-middle">
                                     <thead class="table-dark">
                                         <tr>
-                                            <th>No</th>
+                                            <th width="5%">No</th>
                                             <th>Judul</th>
                                             <th>Kategori</th>
-                                            <th>Versi</th>
-                                            <th>Status</th>
-                                            <th>Tanggal Upload</th>
-                                            <th>Tanggal Kadaluarsa</th>
+                                            <th width="8%">Versi</th>
+                                            <th width="12%">Status</th>
+                                            <th width="12%">Tanggal Upload</th>
+                                            <th width="12%">Tanggal Kadaluarsa</th>
                                             <th>Uploader</th>
-                                            <th>Aksi</th>
+                                            <th width="15%">Aksi</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <?php $no = 1; while ($row = $result->fetch_assoc()): ?>
-                                        <tr>
-                                            <td><?php echo $no++; ?></td>
-                                            <td><?php echo $row['judul_dokumen']; ?></td>
-                                            <td><?php echo $row['nama_kategori']; ?></td>
-                                            <td><?php echo $row['versi']; ?></td>
-                                            <td>
-                                                <?php 
-                                                $badge_class = $row['status'] == 'aktif' ? 'success' : 'warning';
-                                                $kadaluarsa = strtotime($row['tanggal_kadaluarsa']) < time();
-                                                if ($kadaluarsa && $row['status'] == 'aktif') {
-                                                    $badge_class = 'danger';
-                                                    echo '<span class="badge bg-danger">Perlu Update</span>';
-                                                } else {
-                                                    echo '<span class="badge bg-' . $badge_class . '">' . ucfirst($row['status']) . '</span>';
-                                                }
-                                                ?>
-                                            </td>
-                                            <td><?php echo date('d-m-Y', strtotime($row['tanggal_upload'])); ?></td>
-                                            <td><?php echo date('d-m-Y', strtotime($row['tanggal_kadaluarsa'])); ?></td>
-                                            <td><?php echo $row['uploader']; ?></td>
-                                            <td>
-                                                <a href="download.php?id=<?php echo $row['id']; ?>" class="btn btn-sm btn-info" title="Download">
-                                                    <i class="bi bi-download"></i>
-                                                </a>
-                                                <?php if ($role == 'operator' && $row['uploaded_by'] == $user_id): ?>
-                                                <a href="edit.php?id=<?php echo $row['id']; ?>" class="btn btn-sm btn-warning" title="Edit">
-                                                    <i class="bi bi-pencil"></i>
-                                                </a>
-                                                <?php endif; ?>
-                                                <?php if ($role == 'admin'): ?>
-                                                <a href="delete.php?id=<?php echo $row['id']; ?>" class="btn btn-sm btn-danger" onclick="return confirm('Yakin ingin menghapus?')" title="Hapus">
-                                                    <i class="bi bi-trash"></i>
-                                                </a>
-                                                <?php endif; ?>
-                                            </td>
-                                        </tr>
-                                        <?php endwhile; ?>
-                                        <?php if ($result->num_rows == 0): ?>
-                                        <tr>
-                                            <td colspan="9" class="text-center">Tidak ada dokumen</td>
-                                        </tr>
+                                       <?php if (!empty($result)): ?>
+                                           <?php $no = 1; foreach ($result as $row): ?>
+                                            <tr>
+                                                <td><?php echo $no++; ?></td>
+                                                <td><?php echo e($row['judul_dokumen']); ?></td>
+                                                <td><?php echo e($row['nama_kategori']); ?></td>
+                                                <td><?php echo e($row['versi']); ?></td>
+                                                <td><?php echo getStatusBadge($row); ?></td>
+                                                <td><?php echo formatTanggal($row['tanggal_upload']); ?></td>
+                                                <td><?php echo formatTanggal($row['tanggal_kadaluarsa']); ?></td>
+                                                <td><?php echo e($row['uploader']); ?></td>
+                                                <td>
+                                                    <div class="btn-group" role="group">
+                                                        <a href="download.php?id=<?php echo (int)$row['id']; ?>" class="btn btn-sm btn-info" title="Download">
+                                                            <i class="bi bi-download"></i>
+                                                        </a>
+                                                        <?php if ($role == 'operator' && $row['uploaded_by'] == $user_id): ?>
+                                                        <a href="edit.php?id=<?php echo (int)$row['id']; ?>" class="btn btn-sm btn-warning" title="Edit">
+                                                            <i class="bi bi-pencil"></i>
+                                                        </a>
+                                                        <?php endif; ?>
+                                                        <?php if ($role == 'admin'): ?>
+                                                        <a href="delete.php?id=<?php echo (int)$row['id']; ?>" class="btn btn-sm btn-danger" onclick="return confirm('Yakin ingin menghapus dokumen <?php echo e(addslashes($row['judul_dokumen'])); ?>?')" title="Hapus">
+                                                            <i class="bi bi-trash"></i>
+                                                        </a>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            <?php endforeach; ?>
+                                        <?php else: ?>
+                                            <tr>
+                                                <td colspan="9" class="text-center py-4">
+                                                    <i class="bi bi-inbox text-muted" style="font-size: 2rem;"></i>
+                                                    <p class="text-muted mt-2">Tidak ada dokumen</p>
+                                                </td>
+                                            </tr>
                                         <?php endif; ?>
                                     </tbody>
                                 </table>
