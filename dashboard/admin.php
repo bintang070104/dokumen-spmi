@@ -58,6 +58,14 @@ box-shadow:0 4px 6px rgba(0,0,0,0.1);
 background:white;
 box-shadow:0 2px 4px rgba(0,0,0,0.1);
 }
+
+.sidebar-logo {
+    width: 60px;
+    height: 60px;
+    object-fit: contain;
+    display: block;
+    margin: 0 auto;
+}
 </style>
 </head>
 
@@ -70,6 +78,8 @@ box-shadow:0 2px 4px rgba(0,0,0,0.1);
 <div class="col-md-2 sidebar p-0">
 
 <div class="p-3 text-center border-bottom">
+<!-- Tambahkan logo di sini -->
+<img src="../assets/images/logo.png" alt="Logo" class="sidebar-logo mb-2">
 <h5>SPMI System</h5>
 <small>Admin Panel</small>
 </div>

@@ -81,17 +81,30 @@ if ($recent === false) {
         .table td {
             vertical-align: middle;
         }
-    </style>
+   .sidebar-logo {
+    width: 60px;
+    height: 60px;
+    object-fit: contain;
+    display: block;
+    margin: 0 auto;
+}
+</style>
 </head>
+
 <body>
-    <div class="container-fluid">
-        <div class="row">
-            <!-- Sidebar -->
-            <div class="col-md-2 sidebar p-0">
-                <div class="p-3 text-center border-bottom">
-                    <h5>SPMI System</h5>
-                    <small>Operator Panel</small>
-                </div>
+
+<div class="container-fluid">
+<div class="row">
+
+<!-- Sidebar -->
+<div class="col-md-2 sidebar p-0">
+
+<div class="p-3 text-center border-bottom">
+<!-- Tambahkan logo di sini -->
+<img src="../assets/images/logo.png" alt="Logo" class="sidebar-logo mb-2">
+<h5>SPMI System</h5>
+<small>operator Panel</small>
+</div>
                 <ul class="nav flex-column">
                     <li class="nav-item">
                         <a class="nav-link active" href="operator.php">

@@ -76,11 +76,22 @@ if (isset($_GET['delete'])) {
 }
 
 // Ambil data kategori
-$kategori = db_select("SELECT * FROM kategori ORDER BY nama_kategori ASC");
+$kategori = db_select("SELECT * FROM kategori");
 
 // Fallback jika query gagal
 if ($kategori === false) {
     $kategori = [];
+} else {
+    // Urutkan berdasarkan angka di awal nama_kategori (contoh: "1. ASPEK...")
+    usort($kategori, function($a, $b) {
+        preg_match('/^(\d+)/', $a['nama_kategori'], $matchA);
+        preg_match('/^(\d+)/', $b['nama_kategori'], $matchB);
+        
+        $numA = isset($matchA[1]) ? (int)$matchA[1] : 0;
+        $numB = isset($matchB[1]) ? (int)$matchB[1] : 0;
+        
+        return $numA <=> $numB;
+    });
 }
 
 // Ambil pesan dari URL
@@ -100,19 +111,40 @@ if (isset($_GET['error'])) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     <style>
+        .sidebar-logo {
+            width: 60px;
+            height: 60px;
+            object-fit: contain;
+            display: block;
+            margin: 0 auto;
+            border-radius: 8px;
+        }
+
         .sidebar {
             min-height: 100vh;
             background: #2c3e50;
             color: white;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
         }
+
         .sidebar .nav-link {
+            color: rgba(255,255,255,0.9);
+            padding: 12px 20px;
+            border-radius: 0 25px 25px 0;
+            margin-right: 12px;
+            transition: all 0.3s;
+        }
+
+        .sidebar .nav-link:hover, 
+        .sidebar .nav-link.active {
+            background: rgba(255,255,255,0.15);
             color: white;
-            padding: 15px 20px;
         }
-        .sidebar .nav-link:hover, .sidebar .nav-link.active {
-            opacity: 0.9;
-            background: rgba(255,255,255,0.1);
+
+        .sidebar .nav-link i {
+            font-size: 1.1rem;
         }
+
         .navbar {
             background: white;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
@@ -124,34 +156,35 @@ if (isset($_GET['error'])) {
         <div class="row">
             <!-- Sidebar -->
             <div class="col-md-2 sidebar p-0">
-                <div class="p-3 text-center border-bottom">
-                    <h5>SPMI System</h5>
-                    <small>Admin Panel</small>
+                <div class="p-4 text-center border-bottom border-light border-opacity-25">
+                    <img src="../assets/images/logo.png" alt="Logo" class="sidebar-logo mb-2">
+                    <h5 class="mb-1 fw-bold">SPMI System</h5>
+                    <small class="opacity-75">Admin Panel</small>
                 </div>
-                <ul class="nav flex-column">
+                <ul class="nav flex-column mt-2">
                     <li class="nav-item">
                         <a class="nav-link" href="../dashboard/admin.php">
-                            <i class="bi bi-speedometer2 me-2"></i> Dashboard
+                            <i class="bi bi-speedometer2 me-3"></i> Dashboard
                         </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="../dokumen/list.php">
-                            <i class="bi bi-folder me-2"></i> Daftar Dokumen
+                            <i class="bi bi-folder me-3"></i> Daftar Dokumen
                         </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="../users/list.php">
-                            <i class="bi bi-people me-2"></i> Kelola User
+                            <i class="bi bi-people me-3"></i> Kelola User
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link active" href="../kategori/list.php">
-                            <i class="bi bi-tags me-2"></i> Kelola Kategori
+                        <a class="nav-link active" href="list.php">
+                            <i class="bi bi-tags me-3"></i> Kelola Kategori
                         </a>
                     </li>
                     <li class="nav-item mt-auto">
                         <a class="nav-link text-danger" href="../auth/logout.php">
-                            <i class="bi bi-box-arrow-right me-2"></i> Logout
+                            <i class="bi bi-box-arrow-right me-3"></i> Logout
                         </a>
                     </li>
                 </ul>
